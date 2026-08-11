@@ -1,0 +1,81 @@
+# Copyright 2026 The Monti Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+source_set("monti") {
+  sources = [
+    "monti_local_api_server.cc",
+    "monti_local_api_server.h",
+    "monti_bookmark_store.cc",
+    "monti_bookmark_store.h",
+    "monti_extension_store.cc",
+    "monti_extension_store.h",
+    "monti_fingerprint.cc",
+    "monti_fingerprint.h",
+    "monti_folder.h",
+    "monti_manager.cc",
+    "monti_manager.h",
+    "monti_profile_draft.h",
+    "monti_profile_entry.h",
+    "monti_profile_launcher.h",
+    "monti_profile_service.cc",
+    "monti_profile_service.h",
+    "monti_profile_service_factory.cc",
+    "monti_profile_service_factory.h",
+    "monti_proxy.h",
+    "monti_ua.cc",
+    "monti_ua.h",
+    "monti_ua_tab_helper.cc",
+    "monti_ua_tab_helper.h",
+    "csv_importer.cc",
+    "csv_importer.h",
+    "folder_store.cc",
+    "folder_store.h",
+    "profile_store.cc",
+    "profile_store.h",
+    "proxy_applicator.cc",
+    "proxy_applicator.h",
+    "proxy_store.cc",
+    "proxy_store.h",
+    "socks_bridge.cc",
+    "socks_bridge.h",
+  ]
+
+  if (is_mac) {
+    sources += [ "monti_profile_launcher_mac.mm" ]
+  } else {
+    sources += [ "monti_profile_launcher_stub.cc" ]
+  }
+
+  deps = [
+    "//base",
+    "//chrome/browser:browser_process",
+    "//chrome/browser/bookmarks",
+    "//chrome/browser/content_settings:content_settings_factory",
+    "//chrome/browser/lifetime",
+    "//chrome/browser/profiles:profile",
+    "//chrome/browser/profiles:profile_manager",
+    "//chrome/browser/ui/browser_window:browser_window",
+    "//chrome/browser/ui/tabs:tab_strip",
+    "//chrome/common:constants",
+    "//components/bookmarks/browser",
+    "//components/bookmarks/common",
+    "//components/content_settings/core/browser",
+    "//components/content_settings/core/common",
+    "//components/embedder_support:user_agent",
+    "//components/keyed_service/core",
+    "//components/os_crypt/async/browser",
+    "//components/os_crypt/async/common",
+    "//components/pref_registry",
+    "//components/prefs",
+    "//components/proxy_config",
+    "//components/version_info",
+    "//content/public/browser",
+    "//extensions/browser",
+    "//net",
+    "//services/network/public/cpp",
+    "//services/network/public/mojom",
+    "//third_party/blink/public/common",
+    "//url",
+  ]
+}

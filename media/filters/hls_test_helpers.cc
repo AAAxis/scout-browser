@@ -1,0 +1,155 @@
+// Copyright 2023 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "media/filters/hls_test_helpers.h"
+
+#include <optional>
+
+#include "base/compiler_specific.h"
+#include "base/files/file_util.h"
+#include "base/functional/callback_helpers.h"
+#include "base/test/gmock_callback_support.h"
+#include "media/base/test_data_util.h"
+#include "media/filters/hls_data_source_provider.h"
+
+namespace media {
+using testing::_;
+
+MockDataSource::~MockDataSource() = default;
+MockDataSource::MockDataSource() = default;
+
+MockHlsDataSourceProvider::MockHlsDataSourceProvider() = default;
+MockHlsDataSourceProvider::~MockHlsDataSourceProvider() = default;
+
+MockManifestDemuxerEngineHost::MockManifestDemuxerEngineHost() = default;
+MockManifestDemuxerEngineHost::~MockManifestDemuxerEngineHost() = default;
+
+MockHlsRenditionHost::MockHlsRenditionHost() = default;
+MockHlsRenditionHost::~MockHlsRenditionHost() = default;
+
+MockHlsRendition::MockHlsRendition(GURL uri) : uri_(std::move(uri)) {}
+MockHlsRendition::~MockHlsRendition() = default;
+
+MockHlsNetworkAccess::MockHlsNetworkAccess() = default;
+MockHlsNetworkAccess::~MockHlsNetworkAccess() = default;
+
+void MockHlsRendition::UpdatePlaylistURI(const GURL& uri) {
+  MockUpdatePlaylistURI(uri);
+  uri_ = uri;
+}
+
+const GURL& MockHlsRendition::MediaPlaylistUri() const {
+  return uri_;
+}
+
+// static
+std::unique_ptr<HlsDataSourceStream>
+StringHlsDataSourceStreamFactory::CreateStream(
+    std::string content,
+    std::optional<hls::SecurityMetadata> info) {
+  HlsDataSourceProvider::SegmentQueue segments;
+  auto stream = std::make_unique<HlsDataSourceStream>(
+      HlsDataSourceStream::StreamId::FromUnsafeValue(42), std::move(segments),
+      base::DoNothing());
+  base::span<uint8_t> buffer = stream->LockStreamForWriting(content.length());
+  buffer.copy_from(base::as_byte_span(content));
+  stream->UnlockStreamPostWrite(content.length(), true);
+  if (info.has_value()) {
+    stream->SetSecurityInfoForTesting(*info);
+  }
+  return stream;
+}
+
+// static
+std::unique_ptr<HlsDataSourceStream>
+FileHlsDataSourceStreamFactory::CreateStream(
+    std::string filename,
+    std::optional<hls::SecurityMetadata> info) {
+  base::FilePath file_path = GetTestDataFilePath(filename);
+  std::optional<int64_t> file_size = base::GetFileSize(file_path);
+  CHECK(file_size.has_value())
+      << "Failed to get file size for '" << filename << "'";
+  HlsDataSourceProvider::SegmentQueue segments;
+  auto stream = std::make_unique<HlsDataSourceStream>(
+      HlsDataSourceStream::StreamId::FromUnsafeValue(42), std::move(segments),
+      base::DoNothing());
+  base::span<uint8_t> buffer = stream->LockStreamForWriting(
+      base::checked_cast<size_t>(file_size.value()));
+  CHECK_EQ(buffer.size(), base::ReadFile(file_path, buffer).value_or(0));
+  stream->UnlockStreamPostWrite(base::checked_cast<size_t>(file_size.value()),
+                                true);
+
+  if (info.has_value()) {
+    stream->SetSecurityInfoForTesting(*info);
+  }
+  return stream;
+}
+
+MockDataSourceFactory::~MockDataSourceFactory() = default;
+MockDataSourceFactory::MockDataSourceFactory() = default;
+
+void MockDataSourceFactory::Create(
+    const GURL& uri,
+    DataSource::CacheMode cache_mode,
+    DataSource::EncodingMode encoding_mode,
+    base::OnceCallback<void(std::unique_ptr<CrossOriginDataSource>)> cb) {
+  // A test can return a string when expecting a call to MockCreate - this will
+  // become the new URL after redirects.
+  GURL uri_after_redirects = uri;
+  bool redirect_tainted = false;
+  std::optional<std::tuple<std::string, bool>> redirect_override =
+      MockCreate(uri, cache_mode, encoding_mode);
+  if (redirect_override) {
+    uri_after_redirects = GURL(std::get<0>(*redirect_override));
+    redirect_tainted = std::get<1>(*redirect_override);
+  }
+
+  if (!next_mock_) {
+    next_mock_has_redirection_ = false;
+    next_mock_ = std::make_unique<testing::NiceMock<MockDataSource>>();
+    EXPECT_CALL(*next_mock_, Initialize)
+        .WillOnce(base::test::RunOnceCallback<0>(true));
+    for (const auto& e : read_expectations_) {
+      EXPECT_CALL(*next_mock_,
+                  Read(std::get<0>(e), SpanSizeEq(std::get<1>(e)), _))
+          .WillOnce(base::test::RunOnceCallback<2>(std::get<2>(e)));
+    }
+    read_expectations_.clear();
+    EXPECT_CALL(*next_mock_, Stop());
+  }
+
+  if (!next_mock_has_redirection_) {
+    EXPECT_CALL(*next_mock_, GetUrlAfterRedirects())
+        .WillRepeatedly(testing::Return(uri_after_redirects));
+    if (redirect_override.has_value()) {
+      EXPECT_CALL(*next_mock_, DidRedirect())
+          .WillRepeatedly(testing::Return(true));
+      EXPECT_CALL(*next_mock_, WouldTaintOrigin())
+          .WillRepeatedly(testing::Return(redirect_tainted));
+    }
+  }
+
+  std::move(cb).Run(std::move(next_mock_));
+}
+
+void MockDataSourceFactory::AddReadExpectation(size_t from,
+                                               size_t to,
+                                               int response) {
+  read_expectations_.emplace_back(from, to, response);
+}
+
+testing::NiceMock<MockDataSource>* MockDataSourceFactory::PregenerateNextMock(
+    std::optional<std::string> redirect_uri) {
+  next_mock_ = std::make_unique<testing::NiceMock<MockDataSource>>();
+  next_mock_has_redirection_ = redirect_uri.has_value();
+  if (redirect_uri.has_value()) {
+    EXPECT_CALL(*next_mock_, GetUrlAfterRedirects())
+        .WillRepeatedly(testing::Return(GURL(*redirect_uri)));
+    EXPECT_CALL(*next_mock_, DidRedirect())
+        .WillRepeatedly(testing::Return(true));
+  }
+  return next_mock_.get();
+}
+
+}  // namespace media

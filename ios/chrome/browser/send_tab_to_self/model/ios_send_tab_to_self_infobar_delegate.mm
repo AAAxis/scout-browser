@@ -1,0 +1,172 @@
+// Copyright 2019 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#import "ios/chrome/browser/send_tab_to_self/model/ios_send_tab_to_self_infobar_delegate.h"
+
+#import <Foundation/Foundation.h>
+
+#import "base/feature_list.h"
+#import "base/memory/ptr_util.h"
+#import "base/metrics/histogram_macros.h"
+#import "base/strings/sys_string_conversions.h"
+#import "base/strings/utf_string_conversions.h"
+#import "components/infobars/core/infobar.h"
+#import "components/send_tab_to_self/features.h"
+#import "components/send_tab_to_self/metrics_util.h"
+#import "components/send_tab_to_self/page_context.h"
+#import "components/send_tab_to_self/send_tab_to_self_entry.h"
+#import "components/send_tab_to_self/send_tab_to_self_model.h"
+#import "components/shared_highlighting/core/common/text_fragment.h"
+#import "ios/chrome/browser/send_tab_to_self/model/send_tab_to_self_util.h"
+#import "ios/chrome/browser/shared/public/commands/command_dispatcher.h"
+#import "ios/chrome/browser/shared/public/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/shared/public/commands/scene_commands.h"
+#import "ios/chrome/grit/ios_strings.h"
+#import "ios/chrome/grit/ios_theme_resources.h"
+#import "ui/base/l10n/l10n_util.h"
+#import "ui/base/window_open_disposition.h"
+
+namespace {
+
+NSString* const kSendTabToSendConclusionNotification =
+    @"SendTabToSendConclusionNotification";
+
+}  // namespace
+
+namespace send_tab_to_self {
+
+// static
+std::unique_ptr<IOSSendTabToSelfInfoBarDelegate>
+IOSSendTabToSelfInfoBarDelegate::Create(const SendTabToSelfEntry* entry,
+                                        SendTabToSelfModel* model,
+                                        id<SceneCommands> scene_handler) {
+  return std::make_unique<IOSSendTabToSelfInfoBarDelegate>(entry, model,
+                                                           scene_handler);
+}
+
+IOSSendTabToSelfInfoBarDelegate::~IOSSendTabToSelfInfoBarDelegate() {
+  [[NSNotificationCenter defaultCenter]
+      removeObserver:registration_
+                name:kSendTabToSendConclusionNotification
+              object:nil];
+}
+
+const std::string& IOSSendTabToSelfInfoBarDelegate::GetGUID() const {
+  return guid_;
+}
+
+IOSSendTabToSelfInfoBarDelegate::IOSSendTabToSelfInfoBarDelegate(
+    const SendTabToSelfEntry* entry,
+    SendTabToSelfModel* model,
+    id<SceneCommands> scene_handler)
+    : model_(model),
+      scene_handler_(scene_handler),
+      guid_(entry->GetGUID()),
+      weak_ptr_factory_(this) {
+  DCHECK(entry);
+  DCHECK(model);
+  DCHECK(scene_handler);
+
+  base::WeakPtr<IOSSendTabToSelfInfoBarDelegate> weakPtr =
+      weak_ptr_factory_.GetWeakPtr();
+  // Observe for conclusion notification from other instances.
+  registration_ = [[NSNotificationCenter defaultCenter]
+      addObserverForName:kSendTabToSendConclusionNotification
+                  object:nil
+                   queue:nil
+              usingBlock:^(NSNotification* note) {
+                if (!weakPtr) {
+                  return;
+                }
+
+                // Ignore the notification if it was sent by `weakPtr` (i.e. the
+                // instance that responded first to the send to self infobar)
+                if (note.object == weakPtr->registration_) {
+                  return;
+                }
+
+                infobars::InfoBar* infobar = weakPtr->infobar();
+                infobars::InfoBarManager* owner = infobar->owner();
+                if (!owner) {
+                  return;
+                }
+
+                owner->RemoveInfoBar(infobar);
+              }];
+}
+
+infobars::InfoBarDelegate::InfoBarIdentifier
+IOSSendTabToSelfInfoBarDelegate::GetIdentifier() const {
+  return SEND_TAB_TO_SELF_INFOBAR_DELEGATE;
+}
+
+int IOSSendTabToSelfInfoBarDelegate::GetButtons() const {
+  return BUTTON_OK;
+}
+
+std::u16string IOSSendTabToSelfInfoBarDelegate::GetButtonLabel(
+    InfoBarButton button) const {
+  return l10n_util::GetStringUTF16(IDS_SEND_TAB_TO_SELF_INFOBAR_MESSAGE_URL);
+}
+
+int IOSSendTabToSelfInfoBarDelegate::GetIconId() const {
+  return IDR_IOS_INFOBAR_SEND_TAB_TO_SELF;
+}
+
+void IOSSendTabToSelfInfoBarDelegate::InfoBarDismissed() {
+  send_tab_to_self::RecordNotificationDismissed();
+  Cancel();
+}
+
+std::u16string IOSSendTabToSelfInfoBarDelegate::GetTitleText() const {
+  if (base::FeatureList::IsEnabled(send_tab_to_self::kSendTabToSelfAutoOpen)) {
+    return l10n_util::GetStringUTF16(
+        IDS_SEND_TAB_TO_SELF_INFOBAR_AUTO_OPEN_TITLE);
+  }
+  return std::u16string();
+}
+
+std::u16string IOSSendTabToSelfInfoBarDelegate::GetMessageText() const {
+  if (base::FeatureList::IsEnabled(send_tab_to_self::kSendTabToSelfAutoOpen)) {
+    const SendTabToSelfEntry* entry = model_->GetEntryByGUID(guid_);
+    return entry ? l10n_util::GetStringFUTF16(
+                       IDS_SEND_TAB_TO_SELF_INFOBAR_AUTO_OPEN_SUBTITLE,
+                       base::UTF8ToUTF16(entry->GetDeviceName()))
+                 : std::u16string();
+  }
+  return l10n_util::GetStringUTF16(IDS_SEND_TAB_TO_SELF_INFOBAR_MESSAGE);
+}
+
+bool IOSSendTabToSelfInfoBarDelegate::Accept() {
+  send_tab_to_self::RecordNotificationOpened();
+  const SendTabToSelfEntry* entry = model_->GetEntryByGUID(guid_);
+  if (entry) {
+    model_->MarkEntryOpened(guid_);
+    if (base::FeatureList::IsEnabled(
+            send_tab_to_self::kSendTabToSelfAutoOpen)) {
+      [scene_handler_ displayTabGridInMode:TabGridOpeningMode::kRegular];
+    } else {
+      [scene_handler_
+          openURLInNewTab:send_tab_to_self::CreateOpenNewTabCommand(entry)];
+    }
+  }
+
+  SendConclusionNotification();
+  return true;
+}
+
+bool IOSSendTabToSelfInfoBarDelegate::Cancel() {
+  model_->DismissEntry(guid_);
+  SendConclusionNotification();
+  return true;
+}
+
+void IOSSendTabToSelfInfoBarDelegate::SendConclusionNotification() {
+  [[NSNotificationCenter defaultCenter]
+      postNotificationName:kSendTabToSendConclusionNotification
+                    object:registration_
+                  userInfo:nil];
+}
+
+}  // namespace send_tab_to_self

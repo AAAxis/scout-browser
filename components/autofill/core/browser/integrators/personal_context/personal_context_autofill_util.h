@@ -1,0 +1,30 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef COMPONENTS_AUTOFILL_CORE_BROWSER_INTEGRATORS_PERSONAL_CONTEXT_PERSONAL_CONTEXT_AUTOFILL_UTIL_H_
+#define COMPONENTS_AUTOFILL_CORE_BROWSER_INTEGRATORS_PERSONAL_CONTEXT_PERSONAL_CONTEXT_AUTOFILL_UTIL_H_
+
+#include "components/personal_context/core/personal_context_types.h"
+
+namespace personal_context {
+class PersonalContextEnablementService;
+}
+
+class GoogleGroupsManager;
+
+namespace autofill {
+
+// Returns true if the Personal Context setting should be shown in the
+// Autofill settings page.
+bool ShouldShowPersonalContextAutofillSetting(
+    personal_context::PersonalContextEnablementService* enablement_service);
+
+// Returns true if either Autofill Ambient Autofill or Autofill AtMemory is
+// enabled.
+[[nodiscard]] bool AreAutofillPersonalContextFeaturesSupported(
+    const GoogleGroupsManager* google_groups_manager);
+
+}  // namespace autofill
+
+#endif  // COMPONENTS_AUTOFILL_CORE_BROWSER_INTEGRATORS_PERSONAL_CONTEXT_PERSONAL_CONTEXT_AUTOFILL_UTIL_H_

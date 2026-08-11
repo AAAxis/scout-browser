@@ -1,0 +1,106 @@
+/* Copyright 2026 The Chromium Authors
+ * Use of this source code is governed by a BSD-style license that can be
+ * found in the LICENSE file. */
+
+/* #css_wrapper_metadata_start
+ * #type=style-lit
+ * #scheme=relative
+ * #css_wrapper_metadata_end */
+
+:host {
+  display: block;
+}
+
+details {
+  margin-left: 12px;
+}
+
+summary {
+  cursor: pointer;
+  padding: 4px;
+  user-select: none;
+}
+
+summary:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.folder-children {
+  border-left: 1px dashed #ccc;
+  margin-left: 8px;
+}
+
+.bookmark-item {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+  padding: 4px 4px 4px 16px;
+}
+
+.bookmark-icon {
+  flex: 0 0 16px;
+  height: 16px;
+  width: 16px;
+}
+
+a {
+  color: var(--cr-link-color, #1a0dab);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+dialog {
+  border: 0;
+  border-radius: 8px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.24);
+  box-sizing: border-box;
+  color: var(--cr-primary-text-color, #202124);
+  min-width: 320px;
+  padding: 0;
+}
+
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.28);
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+}
+
+h2 {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+  margin: 0;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+input {
+  border: 1px solid var(--cr-separator-color, #dadce0);
+  border-radius: 4px;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 13px;
+  min-height: 32px;
+  padding: 6px 8px;
+}
+
+.dialog-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}

@@ -1,0 +1,24 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.ui.autofill;
+
+import org.chromium.base.Callback;
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.ui.modelutil.PropertyKey;
+import org.chromium.ui.modelutil.PropertyModel.WritableBooleanPropertyKey;
+import org.chromium.ui.modelutil.PropertyModel.WritableObjectPropertyKey;
+
+/** Properties defined here reflect the visible state of the AtMemoryBottomSheet. */
+@NullMarked
+class AtMemoryBottomSheetProperties {
+    static final WritableBooleanPropertyKey VISIBLE = new WritableBooleanPropertyKey();
+    static final WritableObjectPropertyKey<Callback<String>> ON_QUERY_SUBMITTED_CALLBACK =
+            new WritableObjectPropertyKey<>();
+    static final WritableBooleanPropertyKey IS_LOADING = new WritableBooleanPropertyKey();
+
+    static final PropertyKey[] ALL_KEYS = {VISIBLE, ON_QUERY_SUBMITTED_CALLBACK, IS_LOADING};
+
+    private AtMemoryBottomSheetProperties() {}
+}

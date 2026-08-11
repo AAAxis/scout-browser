@@ -1,0 +1,241 @@
+name: Publish browser resource
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'browser-v*'
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Browser platform to publish
+        required: true
+        default: win
+        type: choice
+        options:
+          - win
+          - mac
+          - all
+      version:
+        description: Browser resource version
+        required: true
+        default: 1.0.0
+      browser_dir:
+        description: Built browser output directory
+        required: true
+        default: ""
+      build:
+        description: Run autoninja before packaging
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+env:
+  R2_ENDPOINT: https://fdbfca2be2ba5fdd40b274450f22c6ad.r2.cloudflarestorage.com
+  R2_BUCKET: dima
+  MONTI_BROWSER_MAC_DIR: ${{ vars.MONTI_BROWSER_MAC_DIR }}
+  MONTI_BROWSER_WIN_DIR: ${{ vars.MONTI_BROWSER_WIN_DIR }}
+  MONTI_DEPOT_TOOLS_WIN_DIR: ${{ vars.MONTI_DEPOT_TOOLS_WIN_DIR }}
+
+jobs:
+  publish-mac-browser:
+    name: Publish macOS browser resource
+    if: vars.MONTI_BROWSER_ENABLE_MAC == 'true' || github.event.inputs.platform == 'mac' || github.event.inputs.platform == 'all'
+    runs-on:
+      - self-hosted
+      - macOS
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Resolve inputs
+        id: inputs
+        shell: bash
+        run: |
+          version="${{ github.event.inputs.version }}"
+          browser_dir="${{ github.event.inputs.browser_dir }}"
+          build="${{ github.event.inputs.build }}"
+          if [ -z "${version}" ]; then
+            version="$(date -u '+%Y.%m.%d.%H%M')"
+          fi
+          if [ -z "${browser_dir}" ]; then
+            browser_dir="${MONTI_BROWSER_MAC_DIR:-out/Release-dmg}"
+          fi
+          if [ -z "${build}" ]; then
+            build="false"
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "browser_dir=${browser_dir}" >> "$GITHUB_OUTPUT"
+          echo "build=${build}" >> "$GITHUB_OUTPUT"
+
+      - name: Sync build source from git
+        if: steps.inputs.outputs.build == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          browser_dir="${{ steps.inputs.outputs.browser_dir }}"
+          # browser_dir is <chromium-root>/out/<config>; the actual gclient
+          # checkout autoninja builds from is two levels up. This runner's
+          # actions/checkout@v4 step above only populates a throwaway Actions
+          # workspace that autoninja never reads -- without this, "Build
+          # browser" silently recompiles whatever this persistent checkout
+          # already had on disk, which can be many commits stale (confirmed:
+          # it sat 9 commits behind origin/main, missing real fixes, while
+          # every build here still reported success).
+          src_root="$(dirname "$(dirname "$browser_dir")")"
+          if [ ! -d "$src_root/.git" ]; then
+            echo "No git checkout found at $src_root; cannot verify build source matches ${{ github.sha }}."
+            exit 1
+          fi
+          git -C "$src_root" fetch origin "${{ github.sha }}"
+          git -C "$src_root" checkout --detach "${{ github.sha }}"
+          echo "Build source at $src_root now at $(git -C "$src_root" rev-parse HEAD)"
+
+      - name: Build browser
+        if: steps.inputs.outputs.build == 'true'
+        shell: bash
+        run: autoninja -C "${{ steps.inputs.outputs.browser_dir }}" chrome
+
+      - name: Clean package output
+        shell: bash
+        run: rm -rf resource-release
+
+      - name: Package browser resource
+        shell: bash
+        run: >
+          bash tools/monti/package_browser_resource_macos.sh
+          "${{ steps.inputs.outputs.browser_dir }}"
+          "${{ steps.inputs.outputs.version }}"
+
+      - name: Upload browser resource to R2
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+          AWS_EC2_METADATA_DISABLED: "true"
+        run: node tools/monti/upload_browser_resource_to_r2.cjs
+
+  publish-win-browser:
+    name: Publish Windows browser resource
+    if: github.event.inputs.platform != 'mac'
+    runs-on:
+      - self-hosted
+      - Windows
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          clean: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Resolve inputs
+        id: inputs
+        shell: powershell
+        run: |
+          $version = "${{ github.event.inputs.version }}"
+          $browserDir = "${{ github.event.inputs.browser_dir }}"
+          $build = "${{ github.event.inputs.build }}"
+          if (-not $version) {
+            $version = (Get-Date).ToUniversalTime().ToString("yyyy.MM.dd.HHmm")
+          }
+          if (-not $browserDir) {
+            $browserDir = if ($env:MONTI_BROWSER_WIN_DIR) { $env:MONTI_BROWSER_WIN_DIR } else { "D:\src\out\Release" }
+          }
+          if (-not $build) {
+            $build = "true"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "browser_dir=$browserDir" >> $env:GITHUB_OUTPUT
+          "build=$build" >> $env:GITHUB_OUTPUT
+
+      - name: Add depot_tools to PATH
+        if: steps.inputs.outputs.build == 'true'
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          if (Get-Command autoninja -ErrorAction SilentlyContinue) {
+            Write-Host "autoninja already available on PATH"
+            exit 0
+          }
+
+          $candidates = @(
+            $env:MONTI_DEPOT_TOOLS_WIN_DIR,
+            "D:\depot_tools",
+            "D:\src\depot_tools",
+            "C:\depot_tools",
+            "C:\src\depot_tools",
+            "$env:USERPROFILE\depot_tools"
+          ) | Where-Object { $_ }
+
+          $depotTools = $candidates | Where-Object {
+            Test-Path -LiteralPath (Join-Path $_ "autoninja.bat")
+          } | Select-Object -First 1
+
+          if (-not $depotTools) {
+            throw "autoninja was not found. Install depot_tools on the Windows runner or set repo variable MONTI_DEPOT_TOOLS_WIN_DIR."
+          }
+
+          $depotTools = (Resolve-Path -LiteralPath $depotTools).Path
+          $depotTools | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          $env:Path = "$depotTools;$env:Path"
+          Get-Command autoninja | Format-List Source
+
+      - name: Sync build source from git
+        if: steps.inputs.outputs.build == 'true'
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $browserDir = "${{ steps.inputs.outputs.browser_dir }}"
+          # browser_dir is <chromium-root>\out\<config>; the actual gclient
+          # checkout autoninja builds from is two levels up. This runner's
+          # actions/checkout@v4 step above only populates a throwaway Actions
+          # workspace that autoninja never reads -- without this, "Build
+          # browser" silently recompiles whatever this persistent checkout
+          # already had on disk, which can be many commits stale (confirmed:
+          # it sat 9 commits behind origin/main, missing real fixes, while
+          # every build here still reported success).
+          $srcRoot = Split-Path (Split-Path $browserDir -Parent) -Parent
+          if (-not (Test-Path (Join-Path $srcRoot ".git"))) {
+            throw "No git checkout found at $srcRoot; cannot verify build source matches ${{ github.sha }}."
+          }
+          git -C $srcRoot fetch origin ${{ github.sha }}
+          git -C $srcRoot checkout --detach ${{ github.sha }}
+          Write-Host "Build source at $srcRoot now at $(git -C $srcRoot rev-parse HEAD)"
+
+      - name: Build browser
+        if: steps.inputs.outputs.build == 'true'
+        shell: powershell
+        run: autoninja -C "${{ steps.inputs.outputs.browser_dir }}" chrome
+
+      - name: Clean package output
+        shell: powershell
+        run: Remove-Item -LiteralPath resource-release -Recurse -Force -ErrorAction SilentlyContinue
+
+      - name: Package browser resource
+        shell: powershell
+        run: >
+          .\tools\monti\package_browser_resource.ps1
+          -BrowserDir "${{ steps.inputs.outputs.browser_dir }}"
+          -Version "${{ steps.inputs.outputs.version }}"
+
+      - name: Upload browser resource to R2
+        shell: powershell
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.CLOUDFLARE_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.CLOUDFLARE_R2_SECRET_ACCESS_KEY }}
+          AWS_EC2_METADATA_DISABLED: "true"
+        run: node tools\monti\upload_browser_resource_to_r2.cjs

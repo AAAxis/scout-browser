@@ -1,0 +1,119 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+package org.chromium.chrome.browser.ui.side_ui;
+
+import android.view.View;
+import android.view.ViewGroup;
+
+import androidx.annotation.Px;
+
+import org.chromium.build.annotations.NullMarked;
+import org.chromium.chrome.browser.ui.side_ui.SideUiCoordinator.AnchorSide;
+import org.chromium.chrome.browser.ui.side_ui.SideUiCoordinator.SideUiId;
+
+/**
+ * Container for a side UI view that will be anchored to either the left or right side of the main
+ * browser window.
+ */
+@NullMarked
+public interface SideUiContainer {
+
+    /**
+     * Returns the Android {@link View} held by this container. This will be called when this {@link
+     * SideUiContainer} is being registered to a {@link SideUiCoordinator} so that the backing
+     * {@link View} can be attached to the appropriate {@link ViewGroup} in the view hierarchy.
+     *
+     * <p>Notably, the {@link SideUiContainer} <strong>should not</strong> try to attach its backing
+     * {@link View} to the view hierarchy.
+     *
+     * <p>In addition, this {@link SideUiContainer} should not directly resize or reposition this
+     * backing view outside of implementing {@link #setWidth}.
+     *
+     * @return the {@link View} held by this container.
+     */
+    View getView();
+
+    /**
+     * Returns the unique ID assigned to this {@link SideUiContainer}. The value should be one of
+     * the entries listed in {@link SideUiId}.
+     */
+    @SideUiId
+    int getSideUiId();
+
+    /** Returns the container's current anchor side. */
+    @AnchorSide
+    int getAnchorSide();
+
+    /**
+     * Called by {@link SideUiCoordinator} for this container to determine its <i>showable</i>
+     * width, given the constraints of {@code availableWidth} and {@code windowWidth}.
+     *
+     * <p>"Showable width" is the width for <i>when</i> this {@link SideUiContainer} is shown. A
+     * non-zero showable width means there is enough space for this {@link SideUiContainer}, but it
+     * does <i>not</i> mean the {@link SideUiContainer} will actually be shown.
+     *
+     * <p>Therefore, the return value of this method should depend on {@code availableWidth} and
+     * {@code windowWidth}, but it should <i>not</i> depend on states like whether there is content
+     * to show.
+     *
+     * @param availableWidth The available width that this container can consume in px.
+     * @param windowWidth The new window width in px.
+     */
+    @Px
+    int determineShowableWidth(@Px int availableWidth, @Px int windowWidth);
+
+    /**
+     * Returns whether the container has content to show.
+     *
+     * <p>Note: This is not the same as whether the container is currently shown.
+     *
+     * <ul>
+     *   <li>When the container is currently shown, it definitely has content to show.
+     *   <li>When the container is currently hidden, it <i>may</i> have content to show. For
+     *       example, a container with content to show may need to be hidden due to insufficient
+     *       window real estate. This method should return true in this case to remind {@link
+     *       SideUiCoordinator} to restore the container when the window becomes large enough.
+     * </ul>
+     */
+    boolean hasContentToShow();
+
+    /**
+     * Sets the new width. <strong>Important:</strong> this should only be called by the {@link
+     * SideUiCoordinator} that this container is registered to.
+     *
+     * @param width The new width in px.
+     */
+    void setWidth(@Px int width);
+
+    /**
+     * Called after the container has been resized. This is called after any animations or static
+     * resizing have completed.
+     *
+     * <p>This can be used by the container to perform post-transition cleanup or trigger subsequent
+     * actions that should only occur after the UI has settled.
+     */
+    void onContainerResized(@Px int containerWidth);
+
+    /**
+     * Called when a window size change affects this container's visibility.
+     *
+     * <p>For example, when the window becomes too small, we may need to hide this container. When
+     * the window becomes large enough again, the container can be re-shown.
+     *
+     * <p>This method won't be called if a window size change doesn't affect the container's
+     *
+     * <p>TODO(https://crbug.com/478338737): Delete this API.
+     *
+     * @deprecated New {@link SideUiContainer}s should <i>not</i> implement this API as it is only
+     *     invoked for {@link SideUiId#SIDE_PANEL}. We'll create a new API to support all {@link
+     *     SideUiContainer}s (see <a href="https://crbug.com/478338737#comment6">the tracking
+     *     bug</a>).
+     * @param canShowSideUi Whether this container <i>can</i> be shown after a window size change.
+     *     This parameter doesn't mean this container <i>must</i> be shown or hidden. The final
+     *     decision should be made by this container.
+     */
+    @Deprecated
+    default void onWindowResized(boolean canShowSideUi) {}
+}

@@ -1,0 +1,48 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "chrome/browser/infobars/infobar_features.h"
+
+namespace infobars {
+
+BASE_FEATURE(kCentralizedInfoBarFramework, base::FEATURE_DISABLED_BY_DEFAULT);
+
+BASE_FEATURE_PARAM(bool,
+                   kEnableAll,
+                   &kCentralizedInfoBarFramework,
+                   false);
+
+BASE_FEATURE_PARAM(bool,
+                   kMigratedCollectedCookies,
+                   &kCentralizedInfoBarFramework,
+                   false);
+
+const base::FeatureParam<bool>* GetInfoBarMigrationParam(
+    InfoBarDelegate::InfoBarIdentifier infobar_id) {
+  switch (infobar_id) {
+    case InfoBarDelegate::COLLECTED_COOKIES_INFOBAR_DELEGATE:
+      return &kMigratedCollectedCookies;
+    default:
+      return nullptr;
+  }
+}
+
+bool IsInfoBarMigrated(InfoBarDelegate::InfoBarIdentifier infobar_id) {
+  if (!base::FeatureList::IsEnabled(kCentralizedInfoBarFramework)) {
+    return false;
+  }
+
+  const auto* param = GetInfoBarMigrationParam(infobar_id);
+  if (param == nullptr) {
+    return false;
+  }
+
+  if (kEnableAll.Get()) {
+    return true;
+  }
+
+  return param->Get();
+}
+
+}  // namespace infobars
