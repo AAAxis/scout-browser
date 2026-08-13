@@ -132,6 +132,12 @@ jobs:
       - self-hosted
       - Windows
     steps:
+      # Chromium's tree has paths past Windows' 260-char MAX_PATH; without
+      # longpaths the checkout dies with "Filename too long".
+      - name: Enable git long paths
+        shell: powershell
+        run: git config --global core.longpaths true
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
