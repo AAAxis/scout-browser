@@ -187,8 +187,12 @@ jobs:
             "$env:USERPROFILE\depot_tools"
           ) | Where-Object { $_ }
 
+          # try/catch per candidate: an unreadable directory makes Test-Path
+          # raise (ItemExistsUnauthorizedAccessError) instead of returning
+          # false, and with ErrorActionPreference=Stop that killed the whole
+          # scan before it reached a readable candidate.
           $depotTools = $candidates | Where-Object {
-            Test-Path -LiteralPath (Join-Path $_ "autoninja.bat")
+            try { Test-Path -LiteralPath (Join-Path $_ "autoninja.bat") -ErrorAction SilentlyContinue } catch { $false }
           } | Select-Object -First 1
 
           if (-not $depotTools) {
