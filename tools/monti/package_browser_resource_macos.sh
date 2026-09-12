@@ -26,8 +26,14 @@ done
 # what actually keeps packaging working across that, same as
 # managedBrowserAppPath()'s equivalent scan in monti-gate/electron/main.cjs.
 if [[ -z "${app_path}" ]]; then
+  # Only the browser bundle has Contents/Frameworks; the Helper bundles
+  # sitting beside it in the output dir do not. Without that test the glob
+  # picks "<Product> Helper (Alerts).app" -- it sorts before "<Product>.app",
+  # because the space in the helper names sorts before the dot -- and we would
+  # publish a 1.7MB helper stub as the browser. Checking structure rather than
+  # the name is what keeps this working across the next rebrand.
   for candidate in "${browser_root}"/*.app; do
-    if [[ -d "${candidate}" ]]; then
+    if [[ -d "${candidate}/Contents/Frameworks" ]]; then
       app_path="${candidate}"
       break
     fi
