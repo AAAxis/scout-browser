@@ -9351,8 +9351,8 @@ Keep your key file in a safe place. You will need it to create new versions of y
           Tabs from other devices
         </message>
       </if>
-      <message name="IDS_MONTI_SIDE_PANEL_TITLE" desc="Title of the Monti Browser side panel entry.">
-        Monti
+      <message name="IDS_MONTI_SIDE_PANEL_TITLE" desc="Title of the Scout Web Browser side panel entry.">
+        Scout Web
       </message>
       <message name="IDS_SIDE_PANEL_TOOLBAR_BUTTON_CXMENU_UNPIN" desc="The label of the context menu item for unpinning a side panel toolbar button.">
         Unpin
