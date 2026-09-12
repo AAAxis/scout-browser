@@ -2,7 +2,7 @@ param(
   [string]$BrowserDir = "out\Release",
   [string]$Version = "1.0.0",
   [string]$OutDir = "resource-release",
-  [string]$ArchiveName = "Monti-Browser-win-x64.zip"
+  [string]$ArchiveName = "Scout-Web-win-x64.zip"
 )
 
 $ErrorActionPreference = "Stop"

@@ -4,7 +4,7 @@ set -euo pipefail
 BROWSER_DIR="${1:-out/Release-dmg}"
 VERSION="${2:-1.0.0}"
 OUT_DIR="${3:-resource-release}"
-ARCHIVE_NAME="${4:-Monti-Browser-mac-arm64.zip}"
+ARCHIVE_NAME="${4:-Scout-Web-mac-arm64.zip}"
 MANIFEST_NAME="${5:-latest-mac-arm64.json}"
 
 browser_root="$(cd "${BROWSER_DIR}" && pwd)"

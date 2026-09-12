@@ -14,7 +14,11 @@ if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) {
 
 const releaseDir = process.env.MONTI_BROWSER_RESOURCE_DIR || 'resource-release';
 const uploads = fs.readdirSync(releaseDir)
-    .filter((name) => /^Monti-Browser-.+\.zip$/.test(name) || /^latest-.+\.json$/.test(name))
+    // Both prefixes: the archive is published as Scout-Web-*, but a build
+    // directory packaged before the rename still produces Monti-Browser-*.
+    // A name that matches neither is skipped silently, which would upload the
+    // manifest while leaving its url pointing at a file that was never sent.
+    .filter((name) => /^(Scout-Web|Monti-Browser)-.+\.zip$/.test(name) || /^latest-.+\.json$/.test(name))
     .map((name) => ({
       file: path.join(releaseDir, name),
       key: `resources/browser/${name}`,
