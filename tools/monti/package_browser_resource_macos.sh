@@ -10,6 +10,7 @@ MANIFEST_NAME="${5:-latest-mac-arm64.json}"
 browser_root="$(cd "${BROWSER_DIR}" && pwd)"
 app_path=""
 for candidate in \
+  "${browser_root}/Scout Web.app" \
   "${browser_root}/Monti Browser.app" \
   "${browser_root}/Monti.app" \
   "${browser_root}/Chromium.app"; do
