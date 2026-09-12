@@ -40,6 +40,7 @@ env:
   MONTI_BROWSER_MAC_DIR: ${{ vars.MONTI_BROWSER_MAC_DIR }}
   MONTI_BROWSER_WIN_DIR: ${{ vars.MONTI_BROWSER_WIN_DIR }}
   MONTI_DEPOT_TOOLS_WIN_DIR: ${{ vars.MONTI_DEPOT_TOOLS_WIN_DIR }}
+  MONTI_DEPOT_TOOLS_MAC_DIR: ${{ vars.MONTI_DEPOT_TOOLS_MAC_DIR }}
 
 jobs:
   publish-mac-browser:
@@ -78,6 +79,35 @@ jobs:
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "browser_dir=${browser_dir}" >> "$GITHUB_OUTPUT"
           echo "build=${build}" >> "$GITHUB_OUTPUT"
+
+      - name: Add depot_tools to PATH
+        if: steps.inputs.outputs.build == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if command -v autoninja >/dev/null 2>&1; then
+            echo "autoninja already available on PATH"
+            exit 0
+          fi
+          candidates=(
+            "${MONTI_DEPOT_TOOLS_MAC_DIR:-}"
+            "$HOME/depot_tools"
+            "/usr/local/depot_tools"
+            "/opt/depot_tools"
+          )
+          depot_tools=""
+          for candidate in "${candidates[@]}"; do
+            if [ -n "$candidate" ] && [ -x "$candidate/autoninja" ]; then
+              depot_tools="$candidate"
+              break
+            fi
+          done
+          if [ -z "$depot_tools" ]; then
+            echo "autoninja was not found. Install depot_tools on the macOS runner or set repo variable MONTI_DEPOT_TOOLS_MAC_DIR."
+            exit 1
+          fi
+          echo "$depot_tools" >> "$GITHUB_PATH"
+          echo "Using depot_tools at $depot_tools"
 
       - name: Sync build source from git
         if: steps.inputs.outputs.build == 'true'
